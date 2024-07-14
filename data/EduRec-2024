@@ -1,0 +1,11 @@
+UserID,CourseID,Timestamp,Rating,CourseCategory,UserLevel,CompletionStatus
+U1001,C2045,2023-03-15 14:30:00,4.5,Computer Science,Intermediate,Completed
+U1001,C1089,2023-03-20 09:15:00,3.8,Data Science,Beginner,In Progress
+U1002,C3056,2023-03-18 11:45:00,5.0,Mathematics,Advanced,Completed
+U1003,C2045,2023-03-19 16:20:00,4.2,Computer Science,Beginner,Completed
+U1004,C4023,2023-03-21 13:10:00,3.5,Business,Intermediate,In Progress
+U1002,C1089,2023-03-22 10:05:00,4.7,Data Science,Intermediate,Completed
+U1005,C5011,2023-03-23 15:40:00,4.0,Language,Beginner,In Progress
+U1003,C3056,2023-03-24 08:55:00,4.8,Mathematics,Intermediate,Completed
+U1001,C4023,2023-03-25 12:30:00,3.2,Business,Beginner,Dropped
+U1004,C2045,2023-03-26 17:20:00,4.6,Computer Science,Advanced,In Progress
