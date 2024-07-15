@@ -16,6 +16,10 @@ import torch.optim as optim
 from tqdm import tqdm
 from privacy.differential_privacy import add_noise
 from evaluation.metrics import compute_ndcg, compute_gini_coefficient
+import numpy as np
+from collections import defaultdict
+from privacy.differential_privacy import add_noise
+from explainable.explanation_generator import generate_counterfactual, generate_feature_importance
 
 def parse_arguments():
     parser = argparse.ArgumentParser(description='PP-TEBDE: Privacy-Preserving Temporal Exposure Bias Detection and Explanation')
@@ -177,20 +181,155 @@ class PPTEBDE(nn.Module):
         self.load_state_dict(torch.load(path))
 
     def predict(self, user, items, timestamp):
-        # Implementation of the prediction process
-        pass
+        """
+        Predict the likelihood of a user interacting with given items at a specific timestamp.
+        """
+        self.eval()
+        with torch.no_grad():
+            user_tensor = torch.LongTensor([user]).repeat(len(items))
+            items_tensor = torch.LongTensor(items)
+            timestamp_tensor = torch.FloatTensor([timestamp]).repeat(len(items))
+            
+            outputs = self.forward(user_tensor, items_tensor, timestamp_tensor)
+            
+            # Add differential privacy noise to predictions
+            noisy_outputs = add_noise(outputs, self.config.privacy.epsilon)
+            
+            # Apply sigmoid to get probabilities
+            probabilities = torch.sigmoid(noisy_outputs).cpu().numpy()
+        
+        return probabilities
 
     def detect_bias(self, data):
-        # Implementation of bias detection
-        pass
+        """
+        Detect temporal exposure bias in the given data.
+        """
+        self.eval()
+        user_exposure = defaultdict(lambda: defaultdict(float))
+        item_popularity = defaultdict(float)
+        
+        with torch.no_grad():
+            for batch in data:
+                users, items, timestamps, _ = batch
+                outputs = self.forward(users, items, timestamps)
+                probabilities = torch.sigmoid(outputs).cpu().numpy()
+                
+                for user, item, prob in zip(users.cpu().numpy(), items.cpu().numpy(), probabilities):
+                    user_exposure[user][item] += prob
+                    item_popularity[item] += prob
+        
+        # Compute Gini coefficient for item popularity
+        item_popularity_list = list(item_popularity.values())
+        gini_coefficient = self.compute_gini_coefficient(item_popularity_list)
+        
+        # Compute temporal skew
+        temporal_skew = self.compute_temporal_skew(user_exposure)
+        
+        # Combine metrics to get overall bias score
+        bias_score = 0.5 * gini_coefficient + 0.5 * temporal_skew
+        
+        return bias_score
 
     def mitigate_bias(self, recommendations, detected_bias):
-        # Implementation of bias mitigation
-        pass
+        """
+        Mitigate detected bias in recommendations.
+        """
+        if detected_bias < self.config.bias_threshold:
+            return recommendations  # No mitigation needed
+        
+        mitigated_recommendations = []
+        for user, items in recommendations:
+            # Rerank items to reduce popularity bias
+            popularity_scores = [self.item_popularity[item] for item in items]
+            diversity_boost = 1 - np.array(popularity_scores) / max(popularity_scores)
+            
+            # Combine original scores with diversity boost
+            alpha = self.config.diversity_weight * detected_bias  # Adaptive diversity weight
+            combined_scores = (1 - alpha) * np.array([score for _, score in items]) + alpha * diversity_boost
+            
+            # Sort items by combined score
+            reranked_items = [item for item, _ in sorted(zip(items, combined_scores), key=lambda x: x[1], reverse=True)]
+            
+            mitigated_recommendations.append((user, reranked_items))
+        
+        return mitigated_recommendations
 
     def generate_explanations(self, data):
-        # Implementation of explanation generation
-        pass
+        """
+        Generate explanations for recommendations.
+        """
+        explanations = []
+        self.eval()
+        
+        with torch.no_grad():
+            for batch in data:
+                users, items, timestamps, _ = batch
+                outputs = self.forward(users, items, timestamps)
+                probabilities = torch.sigmoid(outputs).cpu().numpy()
+                
+                for user, item, timestamp, prob in zip(users.cpu().numpy(), items.cpu().numpy(), timestamps.cpu().numpy(), probabilities):
+                    # Generate counterfactual explanation
+                    counterfactual = generate_counterfactual(self, user, item, timestamp)
+                    
+                    # Generate feature importance
+                    feature_importance = generate_feature_importance(self, user, item, timestamp)
+                    
+                    # Generate natural language explanation
+                    nl_explanation = self.generate_nl_explanation(user, item, prob, counterfactual, feature_importance)
+                    
+                    explanations.append({
+                        'user': user,
+                        'item': item,
+                        'probability': prob,
+                        'counterfactual': counterfactual,
+                        'feature_importance': feature_importance,
+                        'natural_language': nl_explanation
+                    })
+        
+        return explanations
+
+    def compute_gini_coefficient(self, values):
+        """
+        Compute the Gini coefficient of the given values.
+        """
+        sorted_values = np.sort(values)
+        index = np.arange(1, len(values) + 1)
+        return (np.sum((2 * index - len(values) - 1) * sorted_values)) / (len(values) * np.sum(sorted_values))
+
+    def compute_temporal_skew(self, user_exposure):
+        """
+        Compute temporal skew in user exposures.
+        """
+        user_skews = []
+        for user, item_exposures in user_exposure.items():
+            timestamps = sorted(item_exposures.keys())
+            exposures = [item_exposures[t] for t in timestamps]
+            
+            # Compute skew as the difference between the area under the exposure curve
+            # and the area under a uniform exposure curve
+            uniform_area = 0.5 * len(timestamps) * len(timestamps)
+            actual_area = np.trapz(exposures, timestamps)
+            skew = abs(actual_area - uniform_area) / uniform_area
+            user_skews.append(skew)
+        
+        return np.mean(user_skews)
+
+    def generate_nl_explanation(self, user, item, probability, counterfactual, feature_importance):
+        """
+        Generate a natural language explanation for a recommendation.
+        """
+        top_features = sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)[:3]
+        
+        explanation = f"User {user} is recommended item {item} with a probability of {probability:.2f}. "
+        explanation += "This recommendation is based on the following factors:\n"
+        
+        for feature, importance in top_features:
+            explanation += f"- {feature}: {importance:.2f}\n"
+        
+        explanation += f"\nIf {counterfactual['changed_feature']} had been {counterfactual['changed_value']}, "
+        explanation += f"the recommendation probability would have been {counterfactual['new_probability']:.2f}."
+        
+        return explanation
 
 if __name__ == '__main__':
     main()
