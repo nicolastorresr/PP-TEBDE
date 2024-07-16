@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  pp-tebde:
+    build: .
+    image: pp-tebde:latest
+    container_name: pp-tebde-app
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config
+    environment:
+      - PYTHONUNBUFFERED=1
+      - TZ=UTC
+      - CONFIG_PATH=/app/config/config.yaml
+    command: python main.py
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  mongodb:
+    image: mongo:latest
+    container_name: pp-tebde-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=root
+      - MONGO_INITDB_ROOT_PASSWORD=example_password
+    restart: unless-stopped
+
+  redis:
+    image: redis:latest
+    container_name: pp-tebde-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+
+networks:
+  default:
+    name: pp-tebde-network
+
+volumes:
+  mongodb_data:
+  redis_data:
