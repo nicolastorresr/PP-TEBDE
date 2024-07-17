@@ -14,7 +14,7 @@ PP-TEBDE is a novel method for detecting and mitigating temporal exposure bias i
 
 1. Clone the repository:
 ```
-git clone https://github.com/yourusername/PP-TEBDE.git
+git clone https://github.com/nicolastorresr/PP-TEBDE.git
 cd PP-TEBDE
 ```
 2. Install dependencies:
