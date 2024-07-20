@@ -19,15 +19,30 @@ def load_dataset(dataset_name, config):
 
 def load_edurec_dataset(config):
     """
-    Load and preprocess the EduRec dataset.
+    Load and preprocess the EduRec-2024 dataset.
     """
     # Load raw data
-    df = pd.read_csv(config.edurec_path)
+    df = pd.read_csv(config.edurec_path, 
+                     names=['UserID', 'CourseID', 'Section', 'Timestamp', 'Rating', 'SCE'])
     
     # Preprocess
-    df['timestamp'] = pd.to_datetime(df['timestamp']).astype(int) / 10**9  # Convert to Unix timestamp
-    df['user_id'] = df['user_id'].astype('category').cat.codes
-    df['item_id'] = df['item_id'].astype('category').cat.codes
+    df['Timestamp'] = pd.to_datetime(df['Timestamp']).astype(int) / 10**9  # Convert to Unix timestamp
+    df['UserID'] = df['UserID'].astype('category').cat.codes
+    df['CourseID'] = df['CourseID'].astype('category').cat.codes
+    
+    # Convert ratings to binary feedback (>=55 is positive)
+    df['Rating'] = (df['Rating'] >= 55).astype(int)
+    
+    # Rename columns to match expected format
+    df = df.rename(columns={
+        'UserID': 'user_id',
+        'CourseID': 'item_id',
+        'Timestamp': 'timestamp',
+        'Rating': 'rating'
+    })
+    
+    # Select relevant columns (excluding SCE)
+    df = df[['user_id', 'item_id', 'timestamp', 'rating']]
     
     return create_train_val_test_split(df, config)
 
