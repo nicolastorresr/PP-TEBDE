@@ -78,24 +78,29 @@ def load_amazon_dataset(config):
 
 def create_train_val_test_split(df, config):
     """
-    Create train, validation, and test splits.
+    Create train, validation, and test splits maintaining temporal order.
     """
-    # Sort by timestamp
+    # Sort by timestamp GLOBALLY
     df = df.sort_values('timestamp')
-
-    # Split into train+val and test
-    train_val, test = train_test_split(df, test_size=config.test_size, shuffle=False)
-
-    # Split train+val into train and val
-    train, val = train_test_split(train_val, test_size=config.val_size, shuffle=False)
-
+    
+    # Calculate split points based on time, not rows
+    total_time = df['timestamp'].max() - df['timestamp'].min()
+    train_cutoff = df['timestamp'].min() + total_time * (1 - config.test_size - config.val_size)
+    val_cutoff = df['timestamp'].min() + total_time * (1 - config.test_size)
+    
+    # Split based on temporal cutoffs
+    train = df[df['timestamp'] < train_cutoff]
+    val = df[(df['timestamp'] >= train_cutoff) & (df['timestamp'] < val_cutoff)]
+    test = df[df['timestamp'] >= val_cutoff]
+    
     # Create DataLoader objects
     train_dataset = PPTEBDEDataset(train)
     val_dataset = PPTEBDEDataset(val)
     test_dataset = PPTEBDEDataset(test)
-
-    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
+    
+    # CRITICAL: shuffle=False for temporal data!
+    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=False)
     val_loader = DataLoader(val_dataset, batch_size=config.batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=config.batch_size, shuffle=False)
-
+    
     return train_loader, val_loader, test_loader
